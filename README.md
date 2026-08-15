@@ -46,6 +46,7 @@ LLSE 自带的 `WSClient` 底层 `lightwebsocketclient` 不支持 TLS，无法�
 | `admin.openids` | `[]` | 全局手动管理员 OpenID（不受群管理方式约束） |
 | `features.full-amount` | `false` | 全量转发默认值（可用“全量”命令按群覆盖） |
 | `features.markdown-query-online` | `true` | “查在线”用自定义 Markdown 卡片展示（`msg_type=2`，官方已向所有机器人开放）；解析失败/发送失败自动回退纯文本 |
+| `features.markdown-whitelist` | `true` | “查白名单”用自定义 Markdown 卡片展示（解析 `allowlist list` 的 JSON 输出）；失败自动回退纯文本 |
 | `join-leave.enabled` | `true` | 进服/退服通知开关 |
 | `join-leave.join-format` / `leave-format` | `[{server}] 🟢/🔴…` | 进/退服群通知模板；`{server}`=`serverName`（回退 `bot.name`）、`{name}`=玩家名 |
 | `audit.base-url` / `audit.api-key` / `audit.model` | 空 / gpt-4o-mini | OpenAI 兼容二次审核端点；配齐后命中本地敏感词才调用 |
@@ -95,7 +96,7 @@ LLSE 自带的 `WSClient` 底层 `lightwebsocketclient` 不支持 TLS，无法�
 | `管理方式 <QQ/手动/双重>` ⭐ | 设置本群管理员判定方式 |
 | `添加白名单 <玩家名>` ⭐ | 执行 `whitelist.add-command` 模板 |
 | `删除白名单 <玩家名>` ⭐ | 执行 `whitelist.del-command` 模板 |
-| `查白名单` | 执行 `whitelist list` 返回结果 |
+| `查白名单` | 执行 `allowlist list` 返回白名单玩家（默认 Markdown 卡片展示；BDS 1.21+，旧版需在源码改回 `whitelist list`） |
 | `绑定白名单 <玩家名>` | 自助：把本人 QQ 与该游戏名绑定并加入白名单（绑定记录存 `bindings`） |
 | `解除绑定` | 自助：解除本人绑定并移出白名单 |
 | `解绑白名单 <玩家名>` ⭐ | 管理员：按游戏名反查绑定并解除，同时移出白名单（用于成员退群后手动解绑） |
