@@ -165,24 +165,20 @@ function handleConsoleCommand(args) {
 }
 
 /**
- * 注册控制台命令。优先 mc.regConsoleCmd（标准 API）；若不存在（旧版引擎）回退
- * mc.listen("onConsoleCmd") 前缀匹配。注意：回调内绝不调用 mc.runcmd(Ex)，
- * 避免 LLSE 文档指出的 onConsoleCmd 内执行后台指令死循环。
+ * 注册控制台命令。优先 mc.regConsoleCmd（标准 API，签名：regConsoleCmd(cmd, description, callback)，
+ * 回调 function(args)，args 为参数数组）；若不存在（旧版引擎）回退 mc.listen("onConsoleCmd") 前缀匹配。
+ * 注意：回调内绝不调用 mc.runcmd(Ex)，避免 LLSE 文档指出的 onConsoleCmd 内执行后台指令死循环。
  */
 function registerConsoleCommands() {
     if (typeof mc !== 'undefined' && typeof mc.regConsoleCmd === 'function') {
         try {
-            mc.regConsoleCmd('huhobot', (origin, output, args) => {
+            mc.regConsoleCmd('huhobot', 'HuHoBotPenguin 插件控制台命令（reload 重载配置 / info 查看信息）', (args) => {
                 const argsArr = Array.isArray(args) ? args : [];
                 const text = handleConsoleCommand(argsArr);
-                if (output && typeof output === 'object') {
-                    output.success = true;
-                    output.output = text;
-                } else {
-                    log.info('[HuHoBotPenguin] ' + text);
-                }
+                log.info('[HuHoBotPenguin] ' + text);
                 return true;
             });
+            log.info('[HuHoBotPenguin] 已注册控制台命令：huhobot reload | huhobot info');
             return;
         } catch (e) {
             log.warn('[HuHoBotPenguin] 注册 huhobot 控制台命令失败，回退事件监听：' + e.message);
