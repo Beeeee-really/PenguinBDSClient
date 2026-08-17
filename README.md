@@ -49,6 +49,7 @@ LLSE 自带的 `WSClient` 底层 `lightwebsocketclient` 不支持 TLS，无法�
 | `features.markdown-whitelist` | `true` | “查白名单”用自定义 Markdown 卡片展示（解析 `allowlist list` 的 JSON 输出）；失败自动回退纯文本 |
 | `motd.ip` | 空 | 服务器公网地址（IP 或域名），填写后“查在线”卡片顶部显示 MOTD 状态图（motd.minebbs.com 需能连通该地址）；留空不显示 |
 | `motd.port` | `19132` | 服务器端口（BDS 默认 19132） |
+| `motd.use-markdown` | `true` | **Markdown 消息总开关**（对齐 Java 版）：`false` 时“查在线/查白名单/motd 命令”全部回退纯文本 |
 | `join-leave.enabled` | `true` | 进服/退服通知开关 |
 | `join-leave.join-format` / `leave-format` | `[{server}] 🟢/🔴…` | 进/退服群通知模板；`{server}`=`serverName`（回退 `bot.name`）、`{name}`=玩家名 |
 | `audit.base-url` / `audit.api-key` / `audit.model` | 空 / gpt-4o-mini | OpenAI 兼容二次审核端点；配齐后命中本地敏感词才调用 |
