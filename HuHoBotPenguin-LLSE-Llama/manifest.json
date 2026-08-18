@@ -1,0 +1,12 @@
+{
+  "name": "HuHoBotPenguin-LLSE-Llama",
+  "type": "lse-nodejs",
+  "entry": "main.js",
+  "author": "huhuo",
+  "version": "1.0.0",
+  "dependencies": [
+    {
+      "name": "legacy-script-engine-nodejs"
+    }
+  ]
+}
