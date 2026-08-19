@@ -657,7 +657,7 @@ function handleGroupMessage(bot, message) {
     const logEvents = bot.config.getBool('debug.log-events', false);
     const groups = bot.config.getList('bot.groups');
     if (groups.length > 0 && !groups.includes(message.groupId)) {
-        if (logEvents) log.info('[HuHoBotPenguin] 群 ' + message.groupId + ' 不在 bot.groups 白名单，忽略');
+        log.info('[HuHoBotPenguin] 群 ' + message.groupId + ' 不在 bot.groups 白名单，已忽略');
         return;
     }
 

@@ -73,6 +73,10 @@ function main() {
     const custom = new CustomCommands(config);
     const client = new QQClient(config);
     bot = new Bot(config, state, client, custom);
+    
+    // 启动时打印群白名单状态，帮助定位问题
+    const groups = config.getList('bot.groups');
+    log.info('[HuHoBotPenguin] 群白名单配置：' + (groups.length === 0 ? '未配置（允许所有群）' : '已配置 ' + groups.length + ' 个群：' + JSON.stringify(groups)));
 
     client.on('groupMessage', (message) => handleGroupMessage(bot, message));
 
