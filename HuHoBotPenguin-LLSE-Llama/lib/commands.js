@@ -703,6 +703,27 @@ function handleGroupMessage(bot, message) {
             return true;
         }
     }
+
+    // 未命中指令的非命令消息 → LLM Agent（AI 版：ai.enabled + base-url 配置后启用）
+    if (bot.agent && bot.agent.isEnabled()) {
+        const agentCtx = {
+            bot,
+            msgId: message.id,
+            groupId: message.groupId,
+            userId: message.userId,
+            username: message.username,
+            memberRole: message.memberRole,
+            content: String(message.content || '')
+        };
+        bot.agent.handleMessage(bot, agentCtx).then((aiReply) => {
+            if (aiReply) {
+                bot.qqclient.sendGroupMessage(ctx.groupId, aiReply, ctx.msgId);
+            }
+        }).catch((e) => {
+            log.error('[HuHoBotPenguin] AI Agent 处理失败：' + (e && e.message || e));
+        });
+        return true; // AI 接管
+    }
     return false;
 }
 

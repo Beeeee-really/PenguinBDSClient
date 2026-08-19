@@ -13,6 +13,8 @@ const { QQClient } = require('./lib/qqclient');
 const { CustomCommands } = require('./lib/customcommands');
 const { handleGroupMessage } = require('./lib/commands');
 const { Bot } = require('./lib/bot');
+const { Agent } = require('./lib/agent');
+const { WebUI } = require('./lib/webui');
 
 const log = typeof logger !== 'undefined' ? logger : console;
 
@@ -62,17 +64,28 @@ function main() {
         runProbe().catch((e) => log.error('[probe] 探针执行出错：' + e.message));
     }
 
-    const appId = config.getString('bot.app-id', '');
-    const secret = config.getString('bot.secret', '');
-    if (!appId || !secret) {
-        log.warn('[HuHoBotPenguin] 未配置 bot.app-id / bot.secret，QQ 机器人未启动。请编辑 plugins/HuHoBotPenguin-LLSE/config.json');
-        return null;
-    }
-
+    // 先创建状态/自定义命令/Bot/Agent（命令执行能力与 QQ 解耦，AI 工具不依赖 QQ 凭据）
     const state = new State(config);
     const custom = new CustomCommands(config);
-    const client = new QQClient(config);
+
+    const appId = config.getString('bot.app-id', '');
+    const secret = config.getString('bot.secret', '');
+    const hasQq = !!(appId && secret);
+
+    // 总是先建 client（无 QQ 凭据时用空 client，仅保留命令执行），再建 Bot
+    const client = hasQq ? new QQClient(config) : null;
     bot = new Bot(config, state, client, custom);
+    const agent = new Agent(config);
+    bot.agent = agent;
+    agent.setBot(bot);   // 无论是否配 QQ，工具都能执行
+
+    const webui = new WebUI(config, agent, reloadPlugin);
+    webui.start();
+
+    if (!hasQq) {
+        log.warn('[HuHoBotPenguin] 未配置 bot.app-id / bot.secret，QQ 机器人未启动（WebUI/命令仍可用）。请编辑 plugins/HuHoBotPenguin-LLSE-Llama/config.json');
+        return { webui };
+    }
 
     client.on('groupMessage', (message) => handleGroupMessage(bot, message));
 
@@ -124,13 +137,14 @@ function main() {
         log.info('[HuHoBotPenguin] 已导出桥接接口：ll.imports("HuHoBotPenguin","send")(玩家名, 原始消息)');
     }
 
-    return { client, onChatHandle, onPlayerJoinHandle, onPlayerLeftHandle };
+    return { client, onChatHandle, onPlayerJoinHandle, onPlayerLeftHandle, webui };
 }
 
 /** 停止当前运行实例：关网关、移除监听。幂等。 */
 function stopRuntime() {
     if (!runtime) return;
     if (runtime.client) runtime.client.stop();
+    if (runtime.webui) runtime.webui.stop();
     if (runtime.onChatHandle) {
         try { mc.removeListener(runtime.onChatHandle); } catch (e) { /* ignore */ }
     }
@@ -153,15 +167,20 @@ function startRuntime() {
 function handleConsoleCommand(args) {
     const sub = String((args && args[0]) || '').toLowerCase();
     if (sub === 'reload') {
-        log.info('[HuHoBotPenguin] 正在重载配置…');
-        stopRuntime();
-        startRuntime();
+        reloadPlugin();
         return '已重载配置文件。';
     }
     if (sub === 'info') {
         return '平台：LeviLamina（LLSE Node.js 后端）\n版本：v' + VERSION + '\n模式：直连 QQ 正式环境';
     }
     return '用法：huhobot reload | huhobot info';
+}
+
+/** 重载插件：停止当前实例并按最新配置重启（供控制台命令与 WebUI 共用）。 */
+function reloadPlugin() {
+    log.info('[HuHoBotPenguin] 正在重载配置…');
+    stopRuntime();
+    startRuntime();
 }
 
 /**

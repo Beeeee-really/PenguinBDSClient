@@ -10,7 +10,7 @@ const path = require('path');
 
 const log = typeof logger !== 'undefined' ? logger : console;
 
-const CONFIG_VERSION = 4;
+const CONFIG_VERSION = 6;
 
 const COMMAND_NAMES = [
     '查信息',
@@ -66,6 +66,24 @@ const DEFAULT_VALUES = {
     'motd.use-markdown': true,
     'motd.api': 'https://motd.minebbs.com/api/status_img?ip={ip}&port={port}',
     'motd.text': '当前在线：{online} 人\n{players}',
+
+    'ai.enabled': false,
+    'ai.base-url': '',
+    'ai.api-key': '',
+    'ai.model': 'gpt-4o-mini',
+    'ai.system-prompt': '你是服务器管理助理，用中文简洁回复。',
+    'ai.max-tokens': 1000,
+    'ai.temperature': 0.7,
+    'ai.context-limit': 10,
+    'ai.timeout': 15000,
+    'ai.admin-openids': [],
+    'ai.skills': [],
+
+    'webui.enabled': false,
+    'webui.port': 8088,
+    'webui.host': '127.0.0.1',
+    'webui.username': 'admin',
+    'webui.password': '',
 
     'join-leave.enabled': true,
     'join-leave.join-format': '[{server}] 🟢{name}进入服务器',

@@ -1,174 +1,103 @@
-# HuHoBotPenguin — LeviLamina (LLSE Node.js 后端)
+# HuHoBotPenguin-Llama — LeviLamina (LLSE Node.js 后端)
 
-QQ 开放平台官方机器人（WebSocket 接入）与 Minecraft 基岩版服务器之间的聊天 / 命令桥接插件。由 Java Spigot 版 HuHoBotPenguin 移植而来，功能平级。
+QQ 开放平台官方机器人与 Minecraft 基岩版服务器之间的聊天 / 命令桥接插件，**内置 LLM AI 助理**（OpenAI 兼容接口，无需额外部署 AstrBot）。由 [HuHoBot/PenguinClient](https://github.com/HuHoBot/PenguinClient)（Java 版）移植。
 
-## 工作原理
+> 本版名为 **Llama**（代指大模型），是在普通版 `HuHoBotPenguin-LLSE` 基础上额外集成 AI 对话能力。不需要 AI 请用普通版。
 
-- **QQ → 游戏**：群内 @机器人 发出的消息（官方 `GROUP_AT_MESSAGE_CREATE` 事件）→ 命令分发 / 全量转发到游戏。
-- **游戏 → QQ**：以 `chat-format.start-with`（默认 `#`）开头的游戏聊天 → 处理后发送到所有已配置的群。
-- **命令执行**：`mc.runcmdEx` 同步执行 BDS 控制台命令并捕获输出，替代 Spigot 版的延迟捕获。
+## AI 能力（相比普通版新增）
 
-## 为什么要求 LSE 的 Node.js 后端
+- **群内 AI 对话**：未命中命令的普通消息 → 发给配置的 LLM → 回复回群，**多轮上下文**（按群保留最近 N 条，重启不丢）
+- **AI 工具调用（function calling）**：AI 可自动调用内置工具：`查询在线玩家` / `查询白名单` / `执行命令`（高危仅 `ai.admin-openids`）
+- **自定义 Skill（🧩）**：在 WebUI 定义自己的 AI 技能，AI 调用后执行你配置的控制台命令（见下文）
+- **零额外依赖**：内置 HTTP/HTTPS 客户端，零 npm 依赖
 
-LLSE 自带的 `WSClient` 底层 `lightwebsocketclient` 不支持 TLS，无法连接 QQ 官方 `wss://` 网关。本插件通过 `lse-nodejs` 后端嵌入完整的 Node 运行时，用内置 `tls`/`net`/`crypto` 自实现最小 RFC6455 WebSocket 客户端，**零 npm 依赖**；REST 走内置 `https`。
-
-## 部署
-
-1. **安装 LSE Node 引擎**（LeviLamina 服上）：`lip install github.com/LiteLDev/LegacyScriptEngine`，并确认 `plugins/legacy-script-engine-nodejs/` 存在（本插件 manifest 依赖名为 `legacy-script-engine-nodejs`，若装了 Lua/QuickJS 后端会报依赖缺失）。
-2. **拷贝插件**：把整个目录内容复制到服务器 `plugins/HuHoBotPenguin-LLSE/`（`manifest.json` 的 `type: lse-nodejs` 会指定走 Node 后端）。
-3. **QQ 开放平台配置**：
-   - 机器人创建后，接入方式选择 **WebSocket**（事件订阅：群聊/私聊事件）。
-   - 在“开发设置”里拿到 **AppID** 与 **AppSecret**。
-   - 若开启了 IP 白名单，把 BDS 服务器的公网出口 IP 加入白名单（否则网关连接会被拒）。
-4. **填配置**：编辑 `plugins/HuHoBotPenguin-LLSE/config.json`，填入 `bot.app-id`、`bot.secret`，并把目标群 OpenID 填进 `bot.groups`（为空 = 所有群都可触发）。
-5. **重启服务器**，控制台应依次出现：
-   - `HuHoBot Penguin 已加载`
-   - `正在获取 access_token…`
-   - `环境：正式，后端 …` → `QQ 机器人已连接（session_id=…）`
-
-> 注意：本版本固定连接**正式环境**（api.bot.qq.com），机器人需**提审上线**后才会在正式网关收到群事件。未上线调试请使用开发版（支持沙箱网关）或先在开放平台完成提审。
-
-## 配置说明
+## 核心配置
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `bot.app-id` / `bot.secret` | 空 | QQ 开放平台凭据，必填 |
-| `bot.name` | HuHoBot | 机器人显示名（“在线服务器”命令回复用） |
-| `serverName` | 空 | 进服/退服通知前缀 `{server}`；留空回退 `bot.name` |
-| `bot.groups` | `[]` | 允许的群 OpenID 列表；空 = 所有群 |
-| `chat-format.from-game` | `[游戏] {name}: {message}` | 游戏 → 群的格式（`{name}` 玩家名） |
-| `chat-format.from-group` | `[QQ] {name}: {message}` | 群 → 游戏的格式（非命令转发时用） |
-| `chat-format.post-chat` | `true` | 群内非命令消息是否广播进游戏（需配合全量转发） |
-| `chat-format.start-with` | `#` | 游戏聊天触发前缀；**留空 = 所有游戏聊天都转发** |
-| `whitelist.add-command` / `del-command` | whitelist add/remove {name} | 白名单命令模板 |
-| `filter-regex` | `[]` | 正则过滤列表（JS 正则语法，命中整词替换为 `*`） |
-| `admin.mode` | `both` | 管理员判定：`qq`（仅群主/管理员）、`manual`（仅手动添加）、`both`（任一即可） |
-| `admin.openids` | `[]` | 全局手动管理员 OpenID（不受群管理方式约束） |
-| `features.full-amount` | `false` | 全量转发默认值（可用“全量”命令按群覆盖） |
-| `features.markdown-query-online` | `true` | “查在线”用自定义 Markdown 卡片展示（`msg_type=2`，官方已向所有机器人开放）；解析失败/发送失败自动回退纯文本 |
-| `features.markdown-whitelist` | `true` | “查白名单”用自定义 Markdown 卡片展示（解析 `allowlist list` 的 JSON 输出）；失败自动回退纯文本 |
-| `motd.ip` | 空 | 服务器公网地址（IP 或域名），填写后“查在线”卡片顶部显示 MOTD 状态图（motd.minebbs.com 需能连通该地址）；留空不显示 |
-| `motd.port` | `19132` | 服务器端口（BDS 默认 19132） |
-| `motd.use-markdown` | `true` | **Markdown 消息总开关**（对齐 Java 版）：`false` 时“查在线/查白名单/motd 命令”全部回退纯文本 |
-| `motd.api` | `https://motd.minebbs.com/api/status_img?ip={ip}&port={port}` | MOTD 状态图 URL 模板（`{ip}`/`{port}` 替换，自动追加时间戳防缓存） |
-| `motd.text` | `当前在线：{online} 人\n{players}` | 查在线纯文本模板（`{online}` 人数、`{players}` 玩家列表、`{server}` 服务器名） |
-| `join-leave.enabled` | `true` | 进服/退服通知开关 |
-| `join-leave.join-format` / `leave-format` | `[{server}] 🟢/🔴…` | 进/退服群通知模板；`{server}`=`serverName`（回退 `bot.name`）、`{name}`=玩家名 |
-| `audit.base-url` / `audit.api-key` / `audit.model` | 空 / gpt-4o-mini | OpenAI 兼容二次审核端点；配齐后命中本地敏感词才调用 |
-| `custom-commands` | `[]` | 自定义命令，见下节 |
-| `commands.<命令名>` | `true` | 单独开关某个内置命令 |
-| `debug.probe` | `false` | 开启后启动时打印环境/TLS 出口探针 |
+| `ai.enabled` | `false` | AI 总开关；`false` 时行为与普通版完全一致 |
+| `ai.base-url` | 空 | OpenAI 兼容接口地址，如 `https://api.openai.com/v1` 或本地 `http://127.0.0.1:11434/v1`（Ollama） |
+| `ai.api-key` | 空 | API 密钥（本地无鉴权可留空） |
+| `ai.model` | `gpt-4o-mini` | 模型名（需支持 function calling，如 DeepSeek / Qwen / GPT 系列） |
+| `ai.system-prompt` | 服务器管理助理 | 系统提示词（插件会自动附加工具使用引导） |
+| `ai.context-limit` | `10` | 每群保留最近 N 条上下文 |
+| `ai.admin-openids` | `[]` | **AI 执行控制台命令 / 管理员 Skill 的 OpenID 白名单**（高危，配你的 QQ OpenID） |
+| `ai.skills` | `[]` | 自定义 Skill 列表（见下文，也可在 WebUI 配置） |
+| `ai.max-tokens` / `ai.temperature` / `ai.timeout` | 1000 / 0.7 / 15000 | 采样与超时参数 |
+| `admin.mode` / `admin.openids` | `both` / `[]` | 群命令管理员判定（与 AI 执行命令用的 `ai.admin-openids` 不同） |
 
-敏感词：代码内置默认词 + `plugins/HuHoBotPenguin-LLSE/sensitive-words/*.txt`（每行一词，`#` 开头为注释，UTF-8）。
-
-## 自定义查在线的 Markdown 输出
-
-首次运行后在插件目录自动生成 `Markdown/online.md`，**可自由编辑**以定制“查在线”Markdown 卡片（对齐 Java 版；覆盖内置默认模板，改完 `huhobot reload` 生效）。
-
-```markdown
-# {{.server}} 在线玩家
-
-![服务器状态 #480px #270px]({{.img_url}})
-
-当前在线：**{{.online_num}}** 人
-
-{{.player}}
-```
-
-| 占位符 | 说明 |
-|---|---|
-| `{{.server}}` | 服务器名（`serverName`，回退 `bot.name`） |
-| `{{.img_url}}` | MOTD 状态图 URL（`motd.api` 模板，自动加时间戳防缓存） |
-| `{{.online_num}}` | 在线人数 |
-| `{{.player}}` | 玩家列表（`1. **名字**` 换行格式） |
-
-## 控制台命令
-
-服务器控制台（或 BDS 后台）输入：
-
-| 命令 | 说明 |
-|---|---|
-| `huhobot reload` | 重新读取 `config.json` 并重启 QQ 机器人网关，**无需重启服务器** |
-| `huhobot info` | 查看平台、插件版本与运行模式 |
-
-> 说明：`reload` 会先停掉旧机器人连接再按新配置重建；若改的是 `bot.app-id` / `bot.secret` 等连接凭据，`reload` 同样生效。
-
-## LuckyClover 插件联动（游戏聊天桥接接口）
-
-当服务器装有 LuckyClover（头衔/聊天美化）且开启 `chatFormatMode: override` 时，聊天展示由 LuckyClover 接管。本插件导出跨插件接口供其调用，沿用原本 LuckyClover→bot 的 `ll.imports(namespace, functionName)` 机制：
-
-- 导出：`ll.exports(fn, "HuHoBotPenguin", "send")` —— 即 `ll.imports("HuHoBotPenguin", "send")`。
-- 签名：`send(玩家名, 原始消息)`。内部**不会绕开 `#` 筛选**：先按 `chat-format.start-with`（默认 `#`）判断 → `auditText` 过滤 → `chat-format.from-game` 格式化 → 推送目标群。
-- 与插件自带的 `onChat` 转发共用 **1.5s 去重**，同一条消息不会被双发。
-- LuckyClover 配置：`chatBridge.namespace` 改为 `"HuHoBotPenguin"`，`functionName` 保持 `"send"`；建议把原第三方 bot 插件（如 `sb3_LuckyCloverMC2QQ`）从服务器移除，避免同命名冲突。
-
-## 内置命令（20 个）
-
-群内 @机器人 + 命令即可。标注 ⭐ 需管理员（按 `admin.mode` 判定）。
-
-| 命令 | 说明 |
-|---|---|
-| `查信息` | 无参：本群 OpenID / 本人 OpenID / 角色 / 认证状态；带参 ⭐：查看指定 OpenID 认证状态 |
-| `发信息 <内容>` | 过滤后广播进游戏（`[QQ] …`） |
-| `发消息 <内容>` | `发信息` 的同义词 |
-| `查在线` | 执行 `list` 返回在线玩家（默认 Markdown 卡片展示，可配置关闭） |
-| `在线服务器` | 返回机器人名 + 在线状态 |
-| `motd <地址[:端口]>` | 查询任意 Minecraft 服务器状态（motd.minebbs.com，支持基岩/Java，在线时 Markdown 卡片 + 状态图展示） |
-| `执行 <key>` | 执行自定义命令（仅 `permission: 0` 的命令） |
-| `执行命令 <命令>` ⭐ | 以管理员身份直接在服务器控制台执行任意命令 |
-| `管理员执行 <key>` ⭐ | 执行任意权限的自定义命令 |
-| `查管理` | 列出本群手动管理员 |
-| `加管理 <OpenID>` ⭐ | 添加本群手动管理员 |
-| `删管理 <OpenID>` ⭐ | 移除本群手动管理员 |
-| `管理方式 <QQ/手动/双重>` ⭐ | 设置本群管理员判定方式 |
-| `添加白名单 <玩家名>` ⭐ | 执行 `whitelist.add-command` 模板 |
-| `删除白名单 <玩家名>` ⭐ | 执行 `whitelist.del-command` 模板 |
-| `查白名单` | 执行 `allowlist list` 返回白名单玩家（默认 Markdown 卡片展示；BDS 1.21+，旧版需在源码改回 `whitelist list`） |
-| `绑定白名单 <玩家名>` | 自助：把本人 QQ 与该游戏名绑定并加入白名单（绑定记录存 `bindings`） |
-| `解除绑定` | 自助：解除本人绑定并移出白名单 |
-| `解绑白名单 <玩家名>` ⭐ | 管理员：按游戏名反查绑定并解除，同时移出白名单（用于成员退群后手动解绑） |
-| `认证` | 无参：本人认证状态；带参 ⭐：认证指定 OpenID（取最后一个词） |
-| `解除认证 [<OpenID>]` | 无参：解除本人；带参 ⭐：解除指定 OpenID |
-| `全量 <开/关>` ⭐ | 设置本群全量转发开关 |
-
-## 自定义命令
+## AI 使用示例
 
 ```json
-"custom-commands": [
-  { "key": "服务器状态", "command": "mem", "permission": 0 },
-  { "key": "踢人", "command": "kick {1} 你已被管理员移除", "permission": 1 }
-]
+"ai": {
+  "enabled": true,
+  "base-url": "https://api.openai.com/v1",
+  "api-key": "sk-xxx",
+  "model": "gpt-4o-mini",
+  "context-limit": 10,
+  "admin-openids": ["你的QQOpenID"]
+}
 ```
 
-- `permission: 0`：普通成员用 `执行 <key>`；`permission > 0`：仅 `管理员执行 <key>`。
-- 占位符：`{params}` 全部参数、`{group}` 群 OpenID、`{user}` 用户 OpenID、`{0}/{1}...` 第 N 个参数、`&0/&1...` 同义。
-- 命令为 BDS 控制台命令字符串，支持空格与参数展开。
+群内 @机器人 说"查在线""现在谁在玩""查一下白名单"等，AI 自动调用对应工具；要 AI 执行控制台命令（如 `执行命令 list`），需把**你的 QQ OpenID 填进 `ai.admin-openids`**。
 
-## 测试（黄金路径）
+## 自定义 Skill
 
-1. 重启后确认 控制台 `QQ 机器人已连接`。
-2. 目标群内 @机器人 发送 `查信息` → 回复本群 OpenID、本人 OpenID。
-3. `认证` → 回复本人认证状态；群主/管理员 `加管理 <OpenID>` → `plugins/HuHoBotPenguin-LLSE/command-state.json` 落盘。
-4. `执行 list` → 回复在线玩家。
-5. 游戏内发送 `#测试消息` → 群收到 `[游戏] 测试消息`；群内 `发信息 hello` → 游戏内广播 `[QQ] <OpenID>: hello`。
-6. 群内 `全量 开` 后发送普通（非命令）@消息 → 游戏内出现 `[QQ] …` 广播。
-7. 断网/重启网关 → 控制台应自动重连（Resume 或重新 Identify）。
+在 WebUI「🧩 Skill 管理」页，或直接改 `ai.skills` 配置，定义 AI 可调用的自定义技能：
 
-## 故障排查
+```json
+"ai": { "skills": [
+  { "key": "server_status", "name": "服务器状态", "desc": "查看服务器内存/性能", "command": "mem", "permission": 0 },
+  { "key": "kick", "name": "踢出玩家", "desc": "将玩家踢出服务器", "command": "kick {0} 你被移除了", "permission": 1 }
+]}
+```
 
-- **连接后立刻关闭 / 4014**：Identify 的 `intents` 只订阅了群聊事件；若机器人能力未开通群聊或未切 WebSocket，会在后台拒绝。检查平台“开发设置 → 接入方式 → WebSocket 与事件订阅”。
-- **能连接但收不到任何群事件（最常见）**：机器人**未提审上线**，正式网关不会推送事件。① 在开放平台完成机器人提审上线；② 确认机器人已被群主“添加到群聊”；③ 群设置里“机器人主动在群聊内发言”已开启。三者缺一都收不到。
-- **加入了“扫码聊天/第三方 Agent”，群内开了“机器人可获取的群聊消息范围 = 获取群内全部消息”但仍收不到**：开启全量后，群里**每一条消息（包括 @ 消息）都以 `GROUP_MESSAGE_CREATE` 全量事件推送**，不再是 `GROUP_AT_MESSAGE_CREATE`。代码需同时处理该事件（`lib/qqclient.js` 已内置）。若此时仍零事件，检查机器人资料卡是否已被群主“添加到群聊”、群设置的“机器人主动在群聊内发言”是否开启。
-- **回复报错 11273 / 鉴权失败**：发消息 `Authorization` 头必须是 `QQBot <token>`（不是 `Bearer`）。代码已按要求实现。
-- **连不上网关**：`debug.probe: true` 打开看 TLS 出口；检查 IP 白名单。
-- **日志没有 access_token 获取记录**：确认 `bot.app-id`/`bot.secret` 已填写且 `plugins/HuHoBotPenguin-LLSE/config.json` 是当前读取的那份。
+| 字段 | 说明 |
+|---|---|
+| `key` | Skill 名（AI 工具名，唯一，自动注册为 `skill__<key>`） |
+| `name` | 显示名（可选） |
+| `desc` | 给 AI 看的描述，说明这个技能做什么 |
+| `command` | 控制台命令模板；`{0}`/`{1}`/`{params}` 为参数占位符（由 AI 按顺序提供），支持 `{group}`/`{user}` |
+| `permission` | `0` 所有人可调；`1` 仅 `ai.admin-openids` 管理员可调 |
 
-## 已知限制
+示例：定义 `kick`（`kick {0} 你被移除了`）后，群里说"把 Steve 踢了"，AI 会调用 `skill__kick` 执行 `kick Steve 你被移除了`（`permission:1` 时还需你的 OpenID 在 `ai.admin-openids`）。
 
-- 群消息事件有两类：默认仅推 @ 机器人的消息（`GROUP_AT_MESSAGE_CREATE`）；若群主在机器人资料卡开启了“获取群内全部消息”，则群里每条消息（含 @）都以 `GROUP_MESSAGE_CREATE` 全量事件推送，本插件两种都处理。仅收到 @ 事件时，“全量转发”只会转发 @ 且非命令的消息。
-- 游戏 → 群方向不能改原消息，只做转发（与 Spigot 端一致）。
-- 灵感移植自 Java 版，`motd.*`、`command-sender` 等死配置已丢弃。
+## WebUI 管理面板
+
+开启后访问 `http://127.0.0.1:8088`：**深色侧边栏 + 多页面**管理后台，无需改配置文件或进服。
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `webui.enabled` | `false` | 是否启用 WebUI（Node http，lse-nodejs 可用） |
+| `webui.host` | `127.0.0.1` | 监听地址：`127.0.0.1`=仅本机访问；`0.0.0.0`=监听所有网卡，**外网可访问**（务必配 `webui.password`） |
+| `webui.port` | `8088` | 监听端口 |
+| `webui.username` / `webui.password` | `admin` / 空 | 登录凭据；**不填密码则无登录校验**（仅本机可安全访问） |
+
+页面功能：
+- **📈 总览**：配置版本、可用工具数、快捷开关（AI / Markdown 一键切换）
+- **🛠️ AI 工具**：展示 AI 可用工具与权限
+- **🧩 Skill 管理**：增删改自定义 Skill（key/名称/权限/描述/命令模板），保存自动生效
+- **💬 AI 对话**：发消息测试 AI（支持工具调用）
+- **⚙️ 配置**：分组表单编辑全部配置，**保存后自动热重载生效**
+- 移动端自动折叠为汉堡菜单
+
+> 仅绑定 `127.0.0.1`；如需外网访问，请在宿主机/反向代理层自行加登录保护。
+
+## 其余功能（同普通版）
+
+- **双向转发**：游戏 `#消息` ↔ QQ 群；20+ 群指令（查在线/白名单/管理员/认证等）
+- **📋 Markdown 卡片**：查在线 / 查白名单 / `motd` 命令（`motd.use-markdown` 总开关）
+- **MOTD 状态图 + 自定义模板**：`Markdown/online.md` 可编辑、`motd.api`/`motd.text` 模板
+- **敏感词审核**：正则 + 本地词库 + OpenAI 二审
+- **控制台命令**：`huhobot reload` / `huhobot info`
+
+## 部署
+
+1. 安装 LSE Node 引擎：`lip install github.com/LiteLDev/LegacyScriptEngine`
+2. 放入 `plugins/HuHoBotPenguin-LLSE-Llama/`
+3. 填 `bot.app-id` / `bot.secret`；AI 版额外填 `ai.*`
+4. 重启服务器 → 控制台 `QQ 机器人已连接`
 
 ## License
 
-[MIT](LICENSE) © 2026 HuHoBot。本插件由 [HuHoBot/PenguinClient](https://github.com/HuHoBot/PenguinClient)（Java 版）移植而来。
+[MIT](LICENSE) © 2026 HuHoBot
