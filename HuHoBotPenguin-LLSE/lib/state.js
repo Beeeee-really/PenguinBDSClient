@@ -36,7 +36,8 @@ class State {
             'authenticated-users': {},
             'administrator-modes': {},
             'full-forwarding': {},
-            bindings: {}
+            bindings: {},
+            'command-panel': { collections: {} }
         };
         this.load();
     }
@@ -49,6 +50,19 @@ class State {
             if (raw['administrator-modes'] && typeof raw['administrator-modes'] === 'object') this.data['administrator-modes'] = raw['administrator-modes'];
             if (raw['full-forwarding'] && typeof raw['full-forwarding'] === 'object') this.data['full-forwarding'] = raw['full-forwarding'];
             if (raw.bindings && typeof raw.bindings === 'object') this.data.bindings = raw.bindings;
+            if (raw['command-panel'] && typeof raw['command-panel'] === 'object' && !Array.isArray(raw['command-panel'])) {
+                const cp = raw['command-panel'];
+                if (cp.collections && typeof cp.collections === 'object' && !Array.isArray(cp.collections)) {
+                    this.data['command-panel'] = { collections: cp.collections };
+                } else if (cp.panelId) {
+                    // 旧版单面板格式：迁移为 addon 集合
+                    this.data['command-panel'] = {
+                        collections: {
+                            addon: { panelId: cp.panelId || null, items: Array.isArray(cp.items) ? cp.items : [] }
+                        }
+                    };
+                }
+            }
         } catch (e) {
             // 首次运行没有状态文件，使用空状态
         }

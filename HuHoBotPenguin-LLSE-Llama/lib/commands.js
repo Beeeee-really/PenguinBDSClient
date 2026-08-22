@@ -407,6 +407,7 @@ const COMMANDS = [
     },
     {
         name: '执行命令',
+        adminOnly: true,
         execute(ctx) {
             // 对齐 Java 版：以管理员身份直接在服务器控制台执行任意命令（参数即命令全文）
             if (!gateAdmin(ctx)) return;
@@ -420,6 +421,7 @@ const COMMANDS = [
     },
     {
         name: '管理员执行',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const item = ctx.bot.custom.resolveAdminRun(ctx.params);
@@ -443,6 +445,7 @@ const COMMANDS = [
     },
     {
         name: '加管理',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const target = String(ctx.params || '').trim();
@@ -457,6 +460,7 @@ const COMMANDS = [
     },
     {
         name: '删管理',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const target = String(ctx.params || '').trim();
@@ -471,6 +475,7 @@ const COMMANDS = [
     },
     {
         name: '管理方式',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const mode = parseMode(ctx.params);
@@ -484,6 +489,7 @@ const COMMANDS = [
     },
     {
         name: '添加白名单',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const name = String(ctx.params || '').trim();
@@ -497,6 +503,7 @@ const COMMANDS = [
     },
     {
         name: '删除白名单',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const name = String(ctx.params || '').trim();
@@ -553,6 +560,7 @@ const COMMANDS = [
     },
     {
         name: '解绑白名单',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const name = String(ctx.params || '').trim();
@@ -620,6 +628,7 @@ const COMMANDS = [
     },
     {
         name: '全量',
+        adminOnly: true,
         execute(ctx) {
             if (!gateAdmin(ctx)) return;
             const enabled = parseOnOff(ctx.params);
@@ -670,6 +679,12 @@ function handleGroupMessage(bot, message) {
         memberRole: message.memberRole
     };
 
+    // 附属插件 OnBotRecvMsg：在公共命令处理前触发；setCancelled 可拦截全部默认处理（含 AI）
+    if (bot.adapter && bot.adapter._recvListeners.size > 0) {
+        const recv = bot.adapter.fireRecvMsg(message);
+        if (recv.cancelled) return true;
+    }
+
     const cleaned = normalizeContent(message.content);
     if (cleaned) {
         const match = dispatch(cleaned);
@@ -688,6 +703,16 @@ function handleGroupMessage(bot, message) {
                 log.error('[HuHoBotPenguin] 命令 ' + match.cmd.name + ' 执行出错：' + (e && e.stack || e));
             }
             return true;
+        }
+        // 附属插件运行时命令：命中后先触发 OnBotCommand（可取消），未取消才执行命令模板
+        if (bot.adapter) {
+            const rt = bot.adapter.matchRuntimeCommand(cleaned);
+            if (rt) {
+                const pack = bot.adapter.buildMsgPack(message, { commandKey: rt.key, commandArguments: rt.params });
+                const fired = bot.adapter.fireBotCommand(pack);
+                if (!fired.cancelled) bot.adapter.executeRuntimeCommand(rt, message);
+                return true;
+            }
         }
         if (logEvents) log.info('[HuHoBotPenguin] 非命令消息（bot.groups=' + JSON.stringify(groups) +
             '，isFullForwarding=' + bot.state.isFullForwarding(message.groupId) + '）');
@@ -727,4 +752,4 @@ function handleGroupMessage(bot, message) {
     return false;
 }
 
-module.exports = { handleGroupMessage, dispatch, normalizeContent, COMMAND_NAMES };
+module.exports = { handleGroupMessage, dispatch, normalizeContent, COMMAND_NAMES, COMMANDS };

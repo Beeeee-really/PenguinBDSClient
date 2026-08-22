@@ -60,6 +60,7 @@ const DEFAULT_VALUES = {
     'features.full-amount': false,
     'features.markdown-query-online': true,
     'features.markdown-whitelist': true,
+    'features.push-menu': true,
 
     'motd.ip': '',
     'motd.port': 19132,

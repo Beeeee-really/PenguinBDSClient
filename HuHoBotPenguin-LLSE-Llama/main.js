@@ -13,6 +13,7 @@ const { QQClient } = require('./lib/qqclient');
 const { CustomCommands } = require('./lib/customcommands');
 const { handleGroupMessage } = require('./lib/commands');
 const { Bot } = require('./lib/bot');
+const { getSharedAdapter } = require('./lib/adapter');
 const { Agent } = require('./lib/agent');
 const { WebUI } = require('./lib/webui');
 
@@ -75,6 +76,12 @@ function main() {
     // 总是先建 client（无 QQ 凭据时用空 client，仅保留命令执行），再建 Bot
     const client = hasQq ? new QQClient(config) : null;
     bot = new Bot(config, state, client, custom);
+
+    // 附属插件开放 API（globalThis 单例，reload 后引用不失效）
+    const adapter = getSharedAdapter();
+    adapter.attachBot(bot);
+    bot.adapter = adapter;
+
     const agent = new Agent(config);
     bot.agent = agent;
     agent.setBot(bot);   // 无论是否配 QQ，工具都能执行
@@ -132,12 +139,40 @@ function main() {
     client.start();
     log.info('[HuHoBotPenguin] HuHoBot Penguin 已加载（v' + VERSION + '）');
 
+    // 内置命令同步到 QQ 指令面板（features.push-menu，默认开；异步不阻塞启动）
+    if (config.getBool('features.push-menu', true)) {
+        adapter.panel.syncBuiltins();
+    }
+
     if (typeof ll.exports === 'function') {
         ll.exports((playerName, rawMsg) => forwardGameMessage(String(playerName || ''), String(rawMsg || '')), 'HuHoBotPenguin', 'send');
         log.info('[HuHoBotPenguin] 已导出桥接接口：ll.imports("HuHoBotPenguin","send")(玩家名, 原始消息)');
+        registerAdapterExports(adapter);
     }
 
     return { client, onChatHandle, onPlayerJoinHandle, onPlayerLeftHandle, webui };
+}
+
+/**
+ * 注册附属插件开放 API 导出（命名空间 "HuHoBotPenguin"），对齐 Java 版适配器公共 API。
+ * 回调签名：onRecvMsg / onBotCommand → fn(msgPack, event)；event.replyText/replyMarkdown/setCancelled。
+ */
+function registerAdapterExports(adapter) {
+    const ns = 'HuHoBotPenguin';
+    ll.exports((fn) => adapter.onRecvMsg(fn), ns, 'onRecvMsg');
+    ll.exports((id) => adapter.offRecvMsg(id), ns, 'offRecvMsg');
+    ll.exports((fn) => adapter.onBotCommand(fn), ns, 'onBotCommand');
+    ll.exports((id) => adapter.offBotCommand(id), ns, 'offBotCommand');
+    ll.exports((key, command, permission, pushMenu) => adapter.registerBotCommand(key, command, permission, pushMenu), ns, 'registerBotCommand');
+    ll.exports((key) => adapter.unregisterBotCommand(key), ns, 'unregisterBotCommand');
+    ll.exports((groupOpenId, openId) => adapter.getAuthenticatedQq(groupOpenId, openId), ns, 'getAuthenticatedQq');
+    ll.exports((groupOpenId, openId) => adapter.getBindingName(groupOpenId, openId), ns, 'getBindingName');
+    ll.exports((groupOpenId, text, msgId) => adapter.sendGroupText(groupOpenId, text, msgId), ns, 'sendGroupText');
+    ll.exports((groupOpenId, markdown, msgId) => adapter.sendGroupMarkdown(groupOpenId, markdown, msgId), ns, 'sendGroupMarkdown');
+    ll.exports((text) => adapter.sendAllGroupsText(text), ns, 'sendAllGroupsText');
+    ll.exports((markdown) => adapter.sendAllGroupsMarkdown(markdown), ns, 'sendAllGroupsMarkdown');
+    log.info('[HuHoBotPenguin] 已导出附属插件 API（namespace="HuHoBotPenguin"）：' +
+        'onRecvMsg/onBotCommand/registerBotCommand/unregisterBotCommand/getAuthenticatedQq/sendGroupText/sendGroupMarkdown/sendAllGroupsText/sendAllGroupsMarkdown');
 }
 
 /** 停止当前运行实例：关网关、移除监听。幂等。 */

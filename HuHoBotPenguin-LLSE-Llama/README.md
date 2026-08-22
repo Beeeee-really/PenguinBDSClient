@@ -98,6 +98,61 @@ QQ 开放平台官方机器人与 Minecraft 基岩版服务器之间的聊天 / 
 3. 填 `bot.app-id` / `bot.secret`；AI 版额外填 `ai.*`
 4. 重启服务器 → 控制台 `QQ 机器人已连接`
 
+## 附属插件 API（开放接口）
+
+对齐 Java 版适配器公共 API，供其他 LLSE 插件通过 `ll.imports("HuHoBotPenguin", "<函数名>")` 调用。API 实例为全局单例，`huhobot reload` 后已持有的引用不失效。
+
+| 导出函数 | 说明 |
+|---|---|
+| `onRecvMsg(fn)` | 监听所有 QQ 消息（在公共命令处理前触发），返回监听器 id；fn 签名 `(msgPack, event)` |
+| `offRecvMsg(id)` | 注销消息监听 |
+| `onBotCommand(fn)` | 监听运行时命令命中（`msgPack.commandKey` / `commandArguments` 已填充），返回监听器 id |
+| `offBotCommand(id)` | 注销命令监听 |
+| `registerBotCommand(key, command, permission, pushMenu)` | 注册运行时自定义命令（`permission > 0` 仅管理员触发）；`pushMenu=true` 时同步到 QQ 官方群聊指令面板 |
+| `unregisterBotCommand(key)` | 注销运行时命令 |
+| `getAuthenticatedQq(groupOpenId, openId)` | 查询认证状态；官方机器人拿不到真实 QQ 号，已认证返回 OpenID，未认证返回 `null` |
+| `getBindingName(groupOpenId, openId)` | 查询白名单绑定游戏名，无绑定返回 `null` |
+| `sendGroupText(groupOpenId, text[, msgId])` | 向指定群发文本 |
+| `sendGroupMarkdown(groupOpenId, markdown[, msgId])` | 向指定群发 Markdown（msg_type=2） |
+| `sendAllGroupsText(text)` | 向所有配置群发文本 |
+| `sendAllGroupsMarkdown(markdown)` | 向所有配置群发 Markdown |
+
+`msgPack` 为不可变消息快照：`messageId`、`groupOpenId`、`sender{id,username,memberRole}`、`content`、`rawContent`、`timestamp`、`commandKey?`、`commandArguments?`、`mentions[]`、`attachments[]`。
+
+`event` 控制器：
+
+- `event.replyText(text)` / `event.replyMarkdown(md)` → 被动回复触发消息，返回是否已提交
+- `event.setCancelled()` → 取消事件，阻止后续默认处理（内置命令执行 / 命令模板执行 / 全量转发 / AI 回复）
+- `event.isCancelled()` → 查询取消状态
+
+示例（附属插件内）：
+
+```js
+const onRecvMsg = ll.imports('HuHoBotPenguin', 'onRecvMsg');
+const registerBotCommand = ll.imports('HuHoBotPenguin', 'registerBotCommand');
+const sendGroupText = ll.imports('HuHoBotPenguin', 'sendGroupText');
+
+// 过滤/审计所有群消息
+onRecvMsg((msg, event) => {
+    if (msg.content.includes('广告')) {
+        event.replyText('请勿发送广告');
+        event.setCancelled(); // 阻止内置命令/全量转发/AI 等默认处理
+    }
+});
+
+// 注册运行时命令：群里发"签到" → 触发 onBotCommand 监听，未取消则执行 score add
+registerBotCommand('签到', 'score add {user} 10', 0, false);
+
+// 主动向某群推送
+sendGroupText('<群OpenID>', '[公告] 服务器即将重启');
+```
+
+处理顺序：`OnBotRecvMsg`（可取消）→ 内置命令 → 运行时命令 `OnBotCommand`（可取消，未取消执行模板）→ 全量转发 → AI Agent。Node 后端单线程运行，监听器内不要执行长时间阻塞操作。
+
+- **指令面板同步**：启动时把开启的内置命令与附属插件注册的命令（pushMenu）自动同步到 QQ 官方群聊指令面板（`features.push-menu`，默认开；`commands.<名>` 关闭的命令不同步）
+
+**指令面板同步（pushMenu）**：QQ 客户端同一场景只展示一个面板，本插件只维护一个 group 面板（跨重启按 remark 找回复用，`panel_id` 持久化在 `command-state.json`）。附属插件 `pushMenu=true` 的命令优先，内置命令按定义顺序填充剩余位置；上限 20 个命令、命令名截断到 14 字符、`permission > 0` 映射为"仅管理员可点"。首次创建时绑定 `bot.groups` 配置的群（未配群则全局生效）；旧版多面板格式会在启动时自动迁移并删除多余面板。
+
 ## License
 
 [MIT](LICENSE) © 2026 HuHoBot

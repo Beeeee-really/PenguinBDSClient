@@ -18,6 +18,7 @@
 - **🖼️ MOTD 状态图 + 可编辑模板**：`Markdown/online.md`、`motd.api` / `motd.text` 模板
 - **🛡️ 敏感词审核**：正则 + 本地词库 + 可选 OpenAI 兼容二审
 - **🎛️ 控制台命令**：`huhobot reload` / `huhobot info`
+- **🔌 附属插件 API**：对齐 Java 版适配器公共 API（事件监听 / 运行时命令 / 认证查询 / 群发送），供其他 LLSE 插件扩展
 - **零 npm 依赖**：自实现 WebSocket / HTTP(S)，零依赖
 
 ## AI 版（Llama）专属
